@@ -58,7 +58,7 @@ def install_assets():
                 if extracted is None:
                     raise RuntimeError('Missing asset archive member')
                 destination.write_bytes(extracted.read())
-                written.append(str(target))
+                written.append(target.as_posix())
         expected = {'marked': 'marked.min.js', 'katex': 'katex/katex.min.js', 'dompurify': 'purify.min.js'}[name]
         if expected not in written:
             raise RuntimeError(f'Missing required viewer asset: {expected}')

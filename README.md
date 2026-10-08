@@ -30,17 +30,18 @@ Uploads: 25 MB maximum, PDFs with 1–20 pages, rendered longest edge 1540 px. J
 | Linux x86-64 CPU | CPU bfloat16 | Real PNG API/browser and single-/three-page PDF native-chooser flows passed; remote-control picker issue remains |
 | Apple Silicon macOS | MPS float32 | Native Chrome PNG/PDF chooser and rendering, API OCR, restart/history and Update/repair passed |
 | Windows x86-64 CPU | CPU bfloat16 | Not tested |
-| Linux/Windows NVIDIA | CUDA 12.8, bfloat16 or float16 | Not tested |
+| Windows NVIDIA | CUDA 12.8 bfloat16 | Native install, PNG/PDF API OCR, browser grounding, restart/history and repeated install passed |
+| Linux NVIDIA | CUDA 12.8, bfloat16 or float16 | Not tested |
 | Intel Mac | Unsupported by pinned PyTorch wheel | Installer rejects |
 | AMD GPU | CPU fallback | Not tested |
 
-These original-viewer checks used runtime commit `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`; older custom-UI results are separate. The user-controlled remote file picker still has an unresolved issue even though agent-operated native chooser tests passed. A cloud CPU three-page sample completed in approximately 19 minutes 20 seconds; this is one completion test, not an accuracy benchmark or general speed claim. Pinokio embedded/popup picking, Mac CPU fallback and Mac multipage-PDF processing remain unverified. See [TESTING.md](TESTING.md) for the exact test scope.
+Linux/Mac original-viewer checks used runtime commit `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`; Windows CUDA checks used that runtime with the Windows browser-asset path fix now included here. Older custom-UI results are separate. The user-controlled remote file picker still has an unresolved issue even though agent-operated native chooser tests passed. A cloud CPU three-page sample completed in approximately 19 minutes 20 seconds; this is one completion test, not an accuracy benchmark or general speed claim. Pinokio embedded/popup picking, Mac CPU fallback and Mac multipage-PDF processing remain unverified. See [TESTING.md](TESTING.md) for the exact test scope.
 
 Plan on at least 8 GB RAM and roughly 8 GB disk for CPU/Mac, with more room for CUDA wheels and saved documents. NVIDIA needs a driver compatible with CUDA 12.8; the launcher does not install drivers. `LIGHTONOCR_DEVICE=cpu|cuda|mps|auto` selects the device; `LIGHTONOCR_DTYPE=float32` is available for CPU compatibility. `/healthz` reports the actual backend and versions.
 
-## Windows manual validation (not yet tested)
+## Windows validation and reproduction
 
-These are manual instructions, not automated CI:
+Windows CUDA validation passed on an NVIDIA RTX A4500 after normalizing cached browser-asset paths. The following steps reproduce the real-model checks. The separate CI matrix tests offline asset extraction and cache reuse on Windows, Linux and macOS; it does not run OCR or validate accelerators.
 
 1. Run Install and Start through Windows Pinokio.
 2. In the repository directory run, replacing `PORT` with the viewer port:

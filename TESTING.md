@@ -2,7 +2,7 @@
 
 This integration replaces the earlier custom UI with upstream LightOnOCR's original viewer, pinned at `36755d461be079737860a5f03ae0c803501269e9`, plus a local Transformers OpenAI-compatible adapter. No vLLM is installed or used.
 
-Runtime-tested commit: `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`. Subsequent documentation-only changes do not alter that runtime.
+Linux/Mac runtime-tested commit: `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`. Windows CUDA tested that same runtime with the browser-asset path normalization included in this revision. The intervening upstream changes were documentation-only.
 
 ## Linux CPU and cloud-browser results (2026-10-08)
 
@@ -18,7 +18,7 @@ Runtime-tested commit: `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`. Subsequent do
 - 14 fake-engine adapter tests pass, including the unchanged official OpenAI client, plain/grounding, sampling, usage/truncation, strict checkpoint loading guard, JSON-safe health, request bounds, cancellation and serialized inference.
 - 63 fake-engine original-viewer HTTP assertions pass, covering original routes/assets, local KaTeX fonts, upload/jobs/history, plain/grounding/selected PDF pages, source/results storage, deletion, host/origin protection and size/page limits. These do not prove model accuracy.
 - Python compilation and JavaScript syntax pass.
-- Windows and CUDA runtime remain untested. Previous custom-UI results are not used to claim original-viewer coverage.
+- Windows CUDA results are recorded separately below. Linux CUDA remains untested. Previous custom-UI results are not used to claim original-viewer coverage.
 
 ## Apple Silicon macOS MPS results (2026-10-08)
 
@@ -32,6 +32,25 @@ Validated the exact original-viewer runtime commit `6f521f837a6a9c27a130924df32d
 - Pinokio embedded/popup file picking, Mac CPU fallback and multipage PDFs were not tested.
 
 These results are specific to native Chrome on the tested Mac; they do not resolve the separate remote-control picker issue described above.
+
+## Windows CUDA results (2026-10-08)
+
+- Hardware: NVIDIA RTX A4500, 19190 MiB VRAM, driver 596.86; Windows 10.0.26200.9457, Pinokio 8.2.2.
+- The unmodified viewer installer failed twice because `str(Path(...))` recorded `katex\\katex.min.js` on Windows while required-asset validation expected `katex/katex.min.js`. The file had been extracted correctly. Recording `target.as_posix()` fixes validation and makes new cache manifests portable; integrity verification is unchanged.
+- Corrected native installation through Pinokio/pterm completed, including pinned browser libraries, model download and `pip check`. No manual asset bypass was used.
+- Native startup passed: Transformers on CUDA bfloat16, Python 3.10.20, torch 2.10.0+cu128, Transformers 5.16.1, OpenAI client 3.26.1. All 532 checkpoint tensors loaded with no missing/unexpected/mismatched keys.
+- Real original-viewer API PNG grounding passed in 7.232 seconds and PDF transcription in 3.154 seconds. Both contained the four fixture strings; PNG produced four parsed layout boxes.
+- Browser New run → choose generated PNG → Run OCR passed. Document image, rendered text, boxes, linked text selection, Raw, label hide/show and zoom/Fit were checked. File selection used the browser automation chooser, so this does not establish Pinokio embedded/popup picker compatibility.
+- Native stop removed the listener. Repeated native installation reused Marked, KaTeX and DOMPurify, downloaded 0.00B model data, and retained model sizes/modification times.
+- Restart/history persistence passed. Real OCR passed again: PNG 7.232 seconds, PDF 3.199 seconds. Both runs reported `REAL_ORIGINAL_VIEWER_IMAGE_PDF_GROUNDING_PASS`.
+- All 63 fake-engine viewer assertions, 14 adapter tests and launcher contracts passed. The corrected app was left online for the user; saved runs were retained.
+- Windows CPU, Windows paths containing spaces and Linux CUDA remain outside these CUDA results.
+
+## Browser-asset regression checks
+
+`python tests/test_frontend_assets.py` uses small in-memory archives and temporary directories; it downloads no packages or models. It checks native extraction and portable cache manifests, download-free repeated installation, recovery of a missing cached font, rejection of tampered bytes and rejection of missing required assets. On Windows the original implementation fails the installation/cache tests; the fixed implementation passes all four tests.
+
+The `Browser asset installation` GitHub Actions workflow runs these checks on Windows, Linux and macOS with Python 3.10 and 3.13. This is asset-installer coverage, not model inference, GPU or complete launcher lifecycle coverage. CI outcomes must be read from the workflow run rather than inferred from this matrix definition.
 
 ## Reproduce
 
@@ -50,6 +69,7 @@ Unit/contract tests (explicit fake engines, no model-inference evidence):
 ```
 app/env/bin/python tests/test_adapter.py
 app/env/bin/python tests/test_viewer.py
+app/env/bin/python tests/test_frontend_assets.py
 node tests/test_launcher.js
 ```
 
