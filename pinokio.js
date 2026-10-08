@@ -1,6 +1,6 @@
 module.exports = {
   version: "3.7",
-  title: "LightOnOCR",
+  title: "LightOnOCR 3",
   icon: "icon.png",
   description: "Private, local image and PDF OCR with LightOnOCR-3-1B. NVIDIA, Apple Silicon and CPU support.",
   menu: async (kernel, info) => {
