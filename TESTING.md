@@ -1,6 +1,8 @@
 # Validation record
 
-Private build tested on 2026-10-08. Windows and CUDA are not tested. macOS validation is being coordinated separately.
+Private build tested on 2026-10-08. Linux CPU and Apple Silicon macOS MPS validation passed. Windows and CUDA are not tested.
+
+Runtime-tested source commit: `f13524761f06dce2209575cbf3c81204e9780805`. Subsequent documentation-only commits do not change that tested runtime.
 
 ## Linux CPU
 
@@ -31,6 +33,20 @@ Pinokiod 8.2.2 emitted an unquoted virtual-environment activation command for a 
 ### Cloud test environment caveats
 
 The isolated cloud daemon needs a separate loopback-only preload because sandbox network-interface enumeration is unavailable. Pinokiod package source is unmodified. Its default native Miniforge download path could not resolve GitHub through the cloud proxy, so the same official Miniforge 26.3.2-3 installer was fetched with curl and installed to Pinokio's managed directory. The environment's existing trusted system CA bundle was supplied via an untracked ENVIRONMENT file for HTTPS proxy trust; certificate verification was never disabled. These cloud-specific settings are not shipped in the launcher.
+
+## Apple Silicon macOS MPS
+
+- Hardware: Apple M1 Max, 64 GiB RAM; macOS 26.3.1(a), arm64; Pinokio 8.2.0.
+- Final runtime commit `f13524761f06dce2209575cbf3c81204e9780805`: native startup passed on MPS float32, including the quoted direct-Python launcher.
+- All 532 checkpoint tensors loaded with zero missing, unexpected or mismatched keys.
+- Real PNG OCR passed in 5.183 seconds; PDF OCR passed in 6.799 seconds.
+- Stop/restart followed by real OCR passed: PNG 6.328 seconds; PDF 10.312 seconds.
+- Every fixture assertion passed; each result contained 30 tokens without truncation.
+- Repeated installation passed with zero model bytes downloaded.
+- UI upload, displayed Markdown and Markdown download passed; downloaded contents were verified.
+- The clean installation was performed on the initial candidate, whose installer, bootstrap and requirements are identical to the final runtime commit. The final source was then tested as described above.
+- The test app was stopped after validation; installed environment and weights were retained, and the working tree was clean.
+- Mac CPU fallback and application paths containing spaces were not tested. These MPS results do not establish Windows or CUDA compatibility.
 
 ## Reproduce
 

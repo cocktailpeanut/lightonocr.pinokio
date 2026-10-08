@@ -1,6 +1,6 @@
 # LightOnOCR for Pinokio
 
-Private tested candidate: Linux CPU image/PDF OCR and launcher lifecycle pass. macOS verification is coordinated separately. Windows and CUDA have not been tested. This is a community launcher, not an official LightOn product.
+Private tested candidate: Linux CPU and Apple Silicon macOS MPS image/PDF OCR and launcher lifecycle pass. Windows and CUDA have not been tested. This is a community launcher, not an official LightOn product.
 
 A small localhost-only image/PDF OCR app for **LightOnOCR-3-1B**, using its official Transformers inference classes. Upload PNG, JPEG, WebP or PDF; receive Markdown, copy it or download a `.md` file. Plain transcription and grounding output are supported. No vLLM, Docker, WSL or hosted OCR service is required.
 
@@ -19,7 +19,7 @@ The server binds to `127.0.0.1` on an available port. Model load completes befor
 | Platform | Installation target | Runtime | Verification |
 |---|---|---|---|
 | Linux x86-64, no supported GPU | CPU wheels | CPU bfloat16 | Image/PDF and lifecycle pass |
-| Apple Silicon macOS | macOS wheels | MPS float32 | In progress |
+| Apple Silicon macOS | macOS wheels | MPS float32 | Image/PDF, lifecycle and UI pass |
 | Windows x86-64, no NVIDIA GPU | CPU wheels | CPU bfloat16 | Not tested |
 | Linux/Windows NVIDIA | CUDA 12.8 wheels | CUDA bfloat16, or float16 on older hardware | Not tested |
 | Intel Mac | Unsupported by pinned PyTorch wheel | — | Installer rejects |
@@ -28,6 +28,22 @@ The server binds to `127.0.0.1` on an available port. Model load completes befor
 See [TESTING.md](TESTING.md) for reproducible commands and measured results.
 
 A recent NVIDIA driver compatible with CUDA 12.8 is required for CUDA. A GPU is optional. Plan on at least 8 GB RAM for CPU/Mac, with more free memory for larger pages; these are initial estimates pending measurements. This launcher does not install drivers. `LIGHTONOCR_DEVICE=cpu|cuda|mps|auto` can select a backend; `LIGHTONOCR_DTYPE=float32` provides a CPU fallback if needed. See the server's `/healthz` for actual backend, dtype and versions.
+
+## Windows manual validation (not yet tested)
+
+No Windows or CUDA runtime pass is claimed, and these checks are not automated CI.
+
+1. Clone this private repository into Windows Pinokio and run **Install**, then **Start**. Note the local URL shown after model readiness.
+2. Open a terminal in the repository directory and run the existing real-model test, replacing `PORT` with the port from that URL:
+
+   ```
+   app\env\Scripts\python.exe tests\test_inference.py http://127.0.0.1:PORT
+   ```
+
+3. Require `REAL_IMAGE_AND_PDF_OCR_PASS`. The script generates its own PNG/PDF and checks the extracted fixture text. Record the actual backend, dtype and versions from `/healthz` and the ignored `tests/results/inference.json`.
+4. Stop and restart through Pinokio, rerun the test, and repeat **Install** to check reuse of existing dependencies and weights. Check a UI upload and downloaded Markdown against the fixture text, then stop the app.
+
+A CPU result does not validate CUDA. Test NVIDIA acceleration separately on suitable hardware and record the backend actually used. Apple Silicon CPU fallback and Mac paths containing spaces have also not been tested.
 
 ## Maintenance
 
