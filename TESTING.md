@@ -2,16 +2,34 @@
 
 This integration replaces the earlier custom UI with upstream LightOnOCR's original viewer, pinned at `36755d461be079737860a5f03ae0c803501269e9`, plus a local Transformers OpenAI-compatible adapter. No vLLM is installed or used.
 
-## Current results (2026-10-08)
+Runtime-tested commit: `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`. Subsequent documentation-only changes do not alter that runtime.
+
+## Linux CPU and cloud-browser results (2026-10-08)
 
 - Real startup passed on Linux CPU bfloat16: all 532 checkpoint tensors loaded, no missing/unexpected/mismatched keys; internal `/v1/models` returned the pinned model before viewer readiness.
 - Real PNG upload through the original `/api/runs` API in grounding mode passed in 25.175 seconds. All four fixture strings were present, and the original parser produced labeled bounding-box blocks. Source/page images/Markdown/grounding JSON were persisted by the original pipeline.
-- The subsequent PDF test was interrupted to release model RAM for the user's browser demonstration. This run is not counted as a PDF pass.
-- Actual browser upload → run → document/layout/rendered result validation is pending. Serving HTML or passing an API test is not called a browser pass.
+- The initial standalone PDF API test was interrupted to release model RAM for the browser demonstration; it is not counted as a PDF API pass.
+- Actual original-browser PNG upload → Run OCR → completed result passed, with all four expected text strings and four visible grounding boxes. This PNG selection used automation file input, not the native chooser.
+- A separate single-page PDF browser test passed through the native desktop chooser: New run → choose fixture.pdf in the native dialog → Open → filename remained selected → Run OCR → completed result with all four expected strings and grounding boxes. This completed at 21:37:26 UTC.
+- The user-controlled remote picker still fails in a flow where agent-operated native input succeeds. Its cause is unconfirmed. These tests do not establish that the user's picker issue is fixed or that the handed-off remote-control experience is fully verified.
+- A three-page PDF job was still in progress when this record was updated. No completed real multipage-PDF pass is claimed.
 - 14 fake-engine adapter tests pass, including the unchanged official OpenAI client, plain/grounding, sampling, usage/truncation, strict checkpoint loading guard, JSON-safe health, request bounds, cancellation and serialized inference.
 - 63 fake-engine original-viewer HTTP assertions pass, covering original routes/assets, local KaTeX fonts, upload/jobs/history, plain/grounding/selected PDF pages, source/results storage, deletion, host/origin protection and size/page limits. These do not prove model accuracy.
 - Python compilation and JavaScript syntax pass.
-- New-viewer Mac, Windows and CUDA runtime tests are pending. Previous custom-UI Mac/Linux tests do not validate this changed integration.
+- Windows and CUDA runtime remain untested. Previous custom-UI results are not used to claim original-viewer coverage.
+
+## Apple Silicon macOS MPS results (2026-10-08)
+
+Validated the exact original-viewer runtime commit `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`:
+
+- Native Chrome file-chooser selection passed for PNG and PDF, without file injection; selected filenames remained attached before submission.
+- Both browser grounding runs returned the expected fixture text and four bounding boxes in the original viewer.
+- Real API OCR passed before and after stop/restart; saved runs persisted.
+- Update/repair passed. Inference used Transformers on MPS float32, with no vLLM.
+- The app was stopped after validation and both viewer/adapter ports closed. Installed environment, weights and launcher icon were retained.
+- Pinokio embedded/popup file picking, Mac CPU fallback and multipage PDFs were not tested.
+
+These results are specific to native Chrome on the tested Mac; they do not resolve the separate remote-control picker issue described above.
 
 ## Reproduce
 
@@ -46,4 +64,4 @@ node tests/test_launcher.js
 
 Earlier native Pinokiod 8.2.2 tests used a separate loopback-only preload because sandbox interface enumeration was unavailable. Pinokiod source was unmodified. Its Miniforge downloader could not resolve GitHub through the cloud proxy, so the same official Miniforge26.3.2-3 installer was fetched using curl into Pinokio's managed directory. The existing trusted system CA bundle was supplied through an ignored ENVIRONMENT file; certificate verification was never disabled. These cloud-specific settings are not shipped.
 
-The original-viewer candidate reuses the installed pinned model and CPU environment. Its new OpenAI client and integrity-checked local browser libraries were installed separately. A complete new native launcher lifecycle retest remains pending.
+The original-viewer candidate reuses the installed pinned model and CPU environment. Its new OpenAI client and integrity-checked local browser libraries were installed separately. A complete new native Linux launcher lifecycle retest remains pending; the separate Mac original-viewer lifecycle results are recorded above.

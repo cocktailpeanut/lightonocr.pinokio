@@ -27,14 +27,14 @@ Uploads: 25 MB maximum, PDFs with 1–20 pages, rendered longest edge 1540 px. J
 
 | Platform | Runtime | Current original-viewer verification |
 |---|---|---|
-| Linux x86-64 CPU | CPU bfloat16 | Real PNG grounding through original run/job API passed; browser/PDF checks pending |
-| Apple Silicon macOS | MPS float32 | Retest pending for original viewer |
+| Linux x86-64 CPU | CPU bfloat16 | Real PNG API/browser and single-page PDF native-chooser browser runs passed; remote-control picker issue remains |
+| Apple Silicon macOS | MPS float32 | Native Chrome PNG/PDF chooser and rendering, API OCR, restart/history and Update/repair passed |
 | Windows x86-64 CPU | CPU bfloat16 | Not tested |
 | Linux/Windows NVIDIA | CUDA 12.8, bfloat16 or float16 | Not tested |
 | Intel Mac | Unsupported by pinned PyTorch wheel | Installer rejects |
 | AMD GPU | CPU fallback | Not tested |
 
-Previous custom-UI Linux/Mac results do not validate this new viewer integration. See [TESTING.md](TESTING.md) for current evidence and limitations.
+These original-viewer checks used runtime commit `6f521f837a6a9c27a130924df32d7a9f1d2f27b3`; older custom-UI results are separate. The user-controlled remote file picker still has an unresolved issue even though agent-operated native chooser tests passed. Pinokio embedded/popup picking, Mac CPU fallback and completed multipage-PDF processing remain unverified. See [TESTING.md](TESTING.md) for the exact test scope.
 
 Plan on at least 8 GB RAM and roughly 8 GB disk for CPU/Mac, with more room for CUDA wheels and saved documents. NVIDIA needs a driver compatible with CUDA 12.8; the launcher does not install drivers. `LIGHTONOCR_DEVICE=cpu|cuda|mps|auto` selects the device; `LIGHTONOCR_DTYPE=float32` is available for CPU compatibility. `/healthz` reports the actual backend and versions.
 
