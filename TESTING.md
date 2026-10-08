@@ -44,13 +44,25 @@ These results are specific to native Chrome on the tested Mac; they do not resol
 - Native stop removed the listener. Repeated native installation reused Marked, KaTeX and DOMPurify, downloaded 0.00B model data, and retained model sizes/modification times.
 - Restart/history persistence passed. Real OCR passed again: PNG 7.232 seconds, PDF 3.199 seconds. Both runs reported `REAL_ORIGINAL_VIEWER_IMAGE_PDF_GROUNDING_PASS`.
 - All 63 fake-engine viewer assertions, 14 adapter tests and launcher contracts passed. The corrected app was left online for the user; saved runs were retained.
-- Windows CPU, Windows paths containing spaces and Linux CUDA remain outside these CUDA results.
+- Windows paths containing spaces and Linux CUDA remain outside these CUDA results. The separate Windows CPU results below do not imply testing a machine without an NVIDIA GPU.
+
+## Windows CPU results (2026-10-08)
+
+- A separate Pinokio app with its own environment and model cache exercised the published runtime on Windows 10.0.26200.9457. The host exposes four cores/eight logical processors of an AMD EPYC 7543P and also has an NVIDIA GPU.
+- A test-only copy of `install.js` forced its existing CPU branch instead of NVIDIA detection; `LIGHTONOCR_DEVICE=cpu` selected runtime CPU. The test harness is not shipped. This validates CPU-only installation/inference on this host, not automatic selection on GPU-free hardware.
+- Native Pinokio/pterm installation completed with torch 2.10.0+cpu, Python 3.10.20, Transformers 5.16.1 and OpenAI client 3.26.1. No CUDA wheels or shared environment/model junctions were used.
+- Unmodified `start.js` loaded all 532 tensors on CPU bfloat16, with no missing/unexpected/mismatched keys. The actual local Transformers adapter responded before viewer readiness.
+- Included real original-viewer API tests passed: PNG grounding in 107.111 seconds, PDF transcription in 249.925 seconds, all four expected fixture strings and four PNG bounding boxes; success marker `REAL_ORIGINAL_VIEWER_IMAGE_PDF_GROUNDING_PASS`.
+- The API-created PNG result was opened in the browser; document image, four boxes and rendered text were visibly verified. CPU browser upload/picker execution was not tested.
+- Native stop removed the listener. Repeated native CPU installation passed `pip check`, reused all three browser libraries and downloaded 0.00B model data; model sizes and modification times were unchanged. Restart readiness, strict CPU-only backend health and persistence of both saved results passed. Real CPU OCR was not repeated after restart; the separate CUDA lifecycle test repeated both fixtures.
 
 ## Browser-asset regression checks
 
 `python tests/test_frontend_assets.py` uses small in-memory archives and temporary directories; it downloads no packages or models. It checks native extraction and portable cache manifests, download-free repeated installation, recovery of a missing cached font, rejection of tampered bytes and rejection of missing required assets. On Windows the original implementation fails the installation/cache tests; the fixed implementation passes all four tests.
 
 The `Browser asset installation` GitHub Actions workflow runs these checks on Windows, Linux and macOS with Python 3.10 and 3.13. This is asset-installer coverage, not model inference, GPU or complete launcher lifecycle coverage. CI outcomes must be read from the workflow run rather than inferred from this matrix definition.
+
+All six jobs passed for fix commit `753b9bccafa22d1b7855291b7c7d2ff3413b4c52`: [workflow run 37857584552](https://github.com/cocktailpeanut/lightonocr.pinokio/actions/runs/37857584552).
 
 ## Reproduce
 

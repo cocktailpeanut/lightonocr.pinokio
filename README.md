@@ -29,7 +29,7 @@ Uploads: 25 MB maximum, PDFs with 1–20 pages, rendered longest edge 1540 px. J
 |---|---|---|
 | Linux x86-64 CPU | CPU bfloat16 | Real PNG API/browser and single-/three-page PDF native-chooser flows passed; remote-control picker issue remains |
 | Apple Silicon macOS | MPS float32 | Native Chrome PNG/PDF chooser and rendering, API OCR, restart/history and Update/repair passed |
-| Windows x86-64 CPU | CPU bfloat16 | Not tested |
+| Windows x86-64 CPU | CPU bfloat16 | CPU-only wheels: install/reinstall, PNG/PDF API OCR, rendered grounding and restart/history passed; forced CPU selection on an NVIDIA host |
 | Windows NVIDIA | CUDA 12.8 bfloat16 | Native install, PNG/PDF API OCR, browser grounding, restart/history and repeated install passed |
 | Linux NVIDIA | CUDA 12.8, bfloat16 or float16 | Not tested |
 | Intel Mac | Unsupported by pinned PyTorch wheel | Installer rejects |
@@ -41,7 +41,7 @@ Plan on at least 8 GB RAM and roughly 8 GB disk for CPU/Mac, with more room for 
 
 ## Windows validation and reproduction
 
-Windows CUDA validation passed on an NVIDIA RTX A4500 after normalizing cached browser-asset paths. The following steps reproduce the real-model checks. The separate CI matrix tests offline asset extraction and cache reuse on Windows, Linux and macOS; it does not run OCR or validate accelerators.
+Windows CUDA validation passed on an NVIDIA RTX A4500 after normalizing cached browser-asset paths. A separate CPU-only installation on the same Windows host passed PNG grounding and PDF transcription in 107.111 and 249.925 seconds. The following steps reproduce the real-model checks. The separate CI matrix passed offline asset extraction and cache reuse on Windows, Linux and macOS with Python 3.10 and 3.13; it does not run OCR or validate accelerators.
 
 1. Run Install and Start through Windows Pinokio.
 2. In the repository directory run, replacing `PORT` with the viewer port:
