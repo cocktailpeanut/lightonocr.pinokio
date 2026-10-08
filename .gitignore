@@ -1,0 +1,12 @@
+app/env/
+app/models/
+app/.installed
+**/__pycache__/
+*.pyc
+logs/
+ENVIRONMENT
+.cache/
+.DS_Store
+tests/fixture.png
+tests/fixture.pdf
+tests/results/
