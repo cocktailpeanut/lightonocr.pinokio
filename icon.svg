@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">LightOnOCR document scanner</title>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#132B44"/>
+      <stop offset="1" stop-color="#081727"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <path d="M157 104h142l64 64v218a22 22 0 0 1-22 22H157a22 22 0 0 1-22-22V126a22 22 0 0 1 22-22Z" fill="#F4FAFF"/>
+  <path d="M299 104v44a20 20 0 0 0 20 20h44Z" fill="#BED2E3"/>
+  <g fill="none" stroke="#294B68" stroke-width="17" stroke-linecap="round">
+    <path d="M182 220h104M182 268h134M182 316h88"/>
+  </g>
+  <g fill="none" stroke="#5EE9C1" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M111 196H87v-64h24M401 196h24v-64h-24M111 316H87v64h24M401 316h24v64h-24"/>
+    <path d="M107 256h298"/>
+  </g>
+</svg>
