@@ -95,9 +95,18 @@ class Engine:
             raise RuntimeError("Model is not installed. Run the launcher Install action first.")
         logger.info("Loading %s on %s (%s) from local files", MODEL_ID, self.device, dtype_name)
         self.processor = LightOnOcrProcessor.from_pretrained(str(MODEL_DIR), local_files_only=True)
-        self.model = LightOnOcrForConditionalGeneration.from_pretrained(
+        # This pinned checkpoint retains the legacy nested CausalLM key prefix.
+        # Transformers' native LightOnOcr class embeds the base language model.
+        self.model, loading = LightOnOcrForConditionalGeneration.from_pretrained(
             str(MODEL_DIR), dtype=self.dtype, local_files_only=True,
-        ).to(self.device).eval()
+            key_mapping={r"^language_model\.model\.": "model.language_model."},
+            output_loading_info=True,
+        )
+        failures = {key: values for key, values in loading.items() if values}
+        if failures:
+            raise RuntimeError(f"Checkpoint weights did not load exactly; refusing to start: {failures}")
+        logger.info("All checkpoint weights loaded; no missing, unexpected, or mismatched keys")
+        self.model = self.model.to(self.device).eval()
         self.versions = {
             "python": sys.version.split()[0], "torch": torch.__version__,
             "transformers": transformers.__version__, "fastapi": package_version("fastapi"),
@@ -122,7 +131,7 @@ class Engine:
                   if value.is_floating_point() else value.to(self.device)
                   for key, value in inputs.items()}
         with self.torch.inference_mode():
-            output_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+            output_ids = self.model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=True, temperature=0.1)
         generated = output_ids[0, inputs["input_ids"].shape[1]:]
         token_count = int(generated.shape[0])
         eos = getattr(self.model.generation_config, "eos_token_id", None)
@@ -133,7 +142,20 @@ class Engine:
 
 
 def normalize_image(image: Image.Image) -> Image.Image:
-    result = ImageOps.exif_transpose(image).convert("RGB")
+    transposed = ImageOps.exif_transpose(image)
+    try:
+        if transposed.mode in {"RGBA", "LA"} or "transparency" in transposed.info:
+            rgba = transposed.convert("RGBA")
+            background = Image.new("RGBA", rgba.size, "white")
+            try:
+                result = Image.alpha_composite(background, rgba).convert("RGB")
+            finally:
+                rgba.close()
+                background.close()
+        else:
+            result = transposed.convert("RGB")
+    finally:
+        transposed.close()
     result.thumbnail((LONGEST_EDGE, LONGEST_EDGE), Image.Resampling.LANCZOS)
     return result
 
@@ -199,13 +221,13 @@ def perform_ocr(engine: Engine, data: bytes, mode: str, max_new_tokens: int) -> 
                         raise HTTPException(415, "Choose a PNG, JPEG, WEBP image or PDF.")
                     original.load()
                     image = normalize_image(original)
-            try:
-                page_ocr(image, 1, 1)
-            finally:
-                image.close()
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError,
                 Image.DecompressionBombWarning) as exc:
             raise HTTPException(400, "This image cannot be opened or is too large. Choose a valid PNG, JPEG, WEBP or PDF.") from exc
+        try:
+            page_ocr(image, 1, 1)
+        finally:
+            image.close()
     elapsed = time.perf_counter() - started
     return {"markdown": "\n\n---\n\n".join(output), "page_count": len(pages),
             "timing": {"total_seconds": round(elapsed, 3),
@@ -270,6 +292,7 @@ async def ocr(request: Request):
     if not inference_lock.acquire(blocking=False):
         raise HTTPException(409, "An OCR job is already running. Wait for it to finish and try again.")
     form = None
+    multipart_parser = None
     try:
         if not request.headers.get("content-type", "").lower().startswith("multipart/form-data"):
             raise HTTPException(415, "Send a multipart form with a file, mode, and max_new_tokens.")
@@ -291,8 +314,8 @@ async def ocr(request: Request):
             yield bytes(body)
 
         try:
-            parser = MemoryMultipartParser(request.headers, body_stream(), max_files=1, max_fields=2)
-            form = await parser.parse()
+            multipart_parser = MemoryMultipartParser(request.headers, body_stream(), max_files=1, max_fields=2)
+            form = await multipart_parser.parse()
         except (MultiPartException, ValueError) as exc:
             raise HTTPException(400, "Invalid upload form. Choose one file and try again.") from exc
         if any(key not in {"file", "mode", "max_new_tokens"} for key in form.keys()):
@@ -328,9 +351,15 @@ async def ocr(request: Request):
         logger.exception("OCR failed")
         raise HTTPException(500, "OCR failed. Check the launcher terminal. For CPU compatibility issues, try LIGHTONOCR_DTYPE=float32 and restart.")
     finally:
-        if form is not None:
-            await form.close()
-        inference_lock.release()
+        try:
+            if form is not None:
+                await form.close()
+            elif multipart_parser is not None:
+                # Also close partially parsed uploads on unexpected parser errors.
+                for temporary_file in getattr(multipart_parser, "_files_to_close_on_error", []):
+                    temporary_file.close()
+        finally:
+            inference_lock.release()
 
 
 def main() -> None:
