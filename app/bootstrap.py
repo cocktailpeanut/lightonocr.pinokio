@@ -48,6 +48,7 @@ def main():
     run(command)
     run([python, '-m', 'pip', 'install', '-r', ROOT / 'requirements.txt', '--index-url', 'https://pypi.org/simple'])
     run([python, '-m', 'pip', 'check'])
+    run([python, ROOT / 'frontend_assets.py'])
     run([python, __file__, '--download-only'])
     marker.write_text(json.dumps({'model': MODEL_ID, 'revision': MODEL_REVISION, 'device_wheels': args.device,
                                   'python': sys.version, 'torch': TORCH_VERSION}, indent=2), encoding='utf-8')

@@ -10,3 +10,6 @@ ENVIRONMENT
 tests/fixture.png
 tests/fixture.pdf
 tests/results/
+
+app/out/
+app/vendor/lightonocr/static/lib/

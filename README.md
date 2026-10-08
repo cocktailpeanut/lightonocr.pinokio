@@ -1,68 +1,71 @@
 # LightOnOCR for Pinokio
 
-Private tested candidate: Linux CPU and Apple Silicon macOS MPS image/PDF OCR and launcher lifecycle pass. Windows and CUDA have not been tested. This is a community launcher, not an official LightOn product.
+The **original LightOnOCR web viewer**, connected to a local **Transformers** backend. **No vLLM is installed or used.** This is a community launcher, not an official LightOn product.
 
-A small localhost-only image/PDF OCR app for **LightOnOCR-3-1B**, using its official Transformers inference classes. Upload PNG, JPEG, WebP or PDF; receive Markdown, copy it or download a `.md` file. Plain transcription and grounding output are supported. No vLLM, Docker, WSL or hosted OCR service is required.
+The original viewer includes persistent runs, document images with linked layout boxes, rendered Markdown/HTML tables/math, label filters, page navigation, zoom and raw output. Its CSS, layout and interaction design come from the pinned official upstream source; this is not a replacement frontend.
 
 ## Install and run
 
-1. Clone this repository into Pinokio (private repository access is required).
-2. Click **Install**. The first install downloads PyTorch, dependencies and approximately 2 GB of model weights. Allow roughly 8 GB of free disk space for CPU/Mac, more for CUDA wheels.
-3. Click **Start**, wait for the model-ready message, then **Open Web UI**.
-4. Upload a document and click Extract. CPU inference can take several minutes. Large or dense pages take longer.
-5. Use Pinokio's Stop control to release model memory.
+1. Clone this private repository into Pinokio and click **Install**. Existing installations must run **Update / repair** after upgrading to this viewer.
+2. Installation downloads pinned PyTorch/dependencies, approximately 2 GB of model weights, and small local browser libraries. No npm install scripts or vLLM dependencies are used.
+3. Click **Start**, wait for model readiness, then **Open LightOnOCR**.
+4. Click **New run**, choose a PDF/image and select grounding (text and layout) or plain transcription. Click **Run**. Progress and completed runs appear in the sidebar.
+5. Open a completed run to inspect the document and rendered output. Use **Raw** for the model's original text.
+6. Stop through Pinokio when finished to release model memory.
 
-The server binds to `127.0.0.1` on an available port. Model load completes before readiness is announced. Uploads remain in memory, are not logged or uploaded to a third-party OCR API, and are not deliberately saved. Model/dependency downloads contact Hugging Face and package registries. Do not expose this local app through a tunnel or public proxy.
+The viewer and internal compatibility API bind only to `127.0.0.1`, on dynamic ports. Readiness requires correctly loaded weights, a responsive adapter and a bound viewer. Model settings are restricted to this launcher's local pinned model; external OCR endpoints are disabled.
 
-## Backends
+## Local storage and limits
 
-| Platform | Installation target | Runtime | Verification |
-|---|---|---|---|
-| Linux x86-64, no supported GPU | CPU wheels | CPU bfloat16 | Image/PDF and lifecycle pass |
-| Apple Silicon macOS | macOS wheels | MPS float32 | Image/PDF, lifecycle and UI pass |
-| Windows x86-64, no NVIDIA GPU | CPU wheels | CPU bfloat16 | Not tested |
-| Linux/Windows NVIDIA | CUDA 12.8 wheels | CUDA bfloat16, or float16 on older hardware | Not tested |
-| Intel Mac | Unsupported by pinned PyTorch wheel | — | Installer rejects |
-| AMD GPU | CPU fallback | CPU | Not tested |
+Unlike the earlier custom UI, the original viewer **saves uploads and OCR results locally** under `app/out/<run>/`: source document, page images, Markdown, grounding JSON and metadata. Runs persist across restarts and are excluded from Git. The viewer can delete runs. Resetting dependencies retains these documents and model weights.
 
-See [TESTING.md](TESTING.md) for reproducible commands and measured results.
+Documents are not sent to a remote OCR provider. Installation contacts Hugging Face and package registries. The viewer's rendering libraries are served locally; no CDN connection is needed to display results. Do not expose this unauthenticated local app through a public tunnel.
 
-A recent NVIDIA driver compatible with CUDA 12.8 is required for CUDA. A GPU is optional. Plan on at least 8 GB RAM for CPU/Mac, with more free memory for larger pages; these are initial estimates pending measurements. This launcher does not install drivers. `LIGHTONOCR_DEVICE=cpu|cuda|mps|auto` can select a backend; `LIGHTONOCR_DTYPE=float32` provides a CPU fallback if needed. See the server's `/healthz` for actual backend, dtype and versions.
+Uploads: 25 MB maximum, PDFs with 1–20 pages, rendered longest edge 1540 px. Jobs and pages are processed serially for this single local model. The compatibility API accepts 128–4096 output tokens; the original viewer uses the adapter's 2048-token default. Dense output can reach that limit, so check important documents against the source. OCR can misread text, figures, numbers and layout.
+
+## Backends and validation
+
+| Platform | Runtime | Current original-viewer verification |
+|---|---|---|
+| Linux x86-64 CPU | CPU bfloat16 | Real PNG grounding through original run/job API passed; browser/PDF checks pending |
+| Apple Silicon macOS | MPS float32 | Retest pending for original viewer |
+| Windows x86-64 CPU | CPU bfloat16 | Not tested |
+| Linux/Windows NVIDIA | CUDA 12.8, bfloat16 or float16 | Not tested |
+| Intel Mac | Unsupported by pinned PyTorch wheel | Installer rejects |
+| AMD GPU | CPU fallback | Not tested |
+
+Previous custom-UI Linux/Mac results do not validate this new viewer integration. See [TESTING.md](TESTING.md) for current evidence and limitations.
+
+Plan on at least 8 GB RAM and roughly 8 GB disk for CPU/Mac, with more room for CUDA wheels and saved documents. NVIDIA needs a driver compatible with CUDA 12.8; the launcher does not install drivers. `LIGHTONOCR_DEVICE=cpu|cuda|mps|auto` selects the device; `LIGHTONOCR_DTYPE=float32` is available for CPU compatibility. `/healthz` reports the actual backend and versions.
 
 ## Windows manual validation (not yet tested)
 
-No Windows or CUDA runtime pass is claimed, and these checks are not automated CI.
+These are manual instructions, not automated CI:
 
-1. Clone this private repository into Windows Pinokio and run **Install**, then **Start**. Note the local URL shown after model readiness.
-2. Open a terminal in the repository directory and run the existing real-model test, replacing `PORT` with the port from that URL:
+1. Run Install and Start through Windows Pinokio.
+2. In the repository directory run, replacing `PORT` with the viewer port:
 
    ```
    app\env\Scripts\python.exe tests\test_inference.py http://127.0.0.1:PORT
    ```
 
-3. Require `REAL_IMAGE_AND_PDF_OCR_PASS`. The script generates its own PNG/PDF and checks the extracted fixture text. Record the actual backend, dtype and versions from `/healthz` and the ignored `tests/results/inference.json`.
-4. Stop and restart through Pinokio, rerun the test, and repeat **Install** to check reuse of existing dependencies and weights. Check a UI upload and downloaded Markdown against the fixture text, then stop the app.
-
-A CPU result does not validate CUDA. Test NVIDIA acceleration separately on suitable hardware and record the backend actually used. Apple Silicon CPU fallback and Mac paths containing spaces have also not been tested.
+3. Require `REAL_ORIGINAL_VIEWER_IMAGE_PDF_GROUNDING_PASS`. This checks actual PNG grounding and PDF transcription through the original viewer API and saves ignored results under `tests/results`.
+4. Also test **New run → choose file → Run** in the browser, then verify the document image, text, layout boxes and raw view. API tests alone do not establish browser usability.
+5. Stop/restart and repeat OCR; repeat Install to verify cached reuse. Record `/healthz`, then stop the app. CPU success does not validate CUDA.
 
 ## Maintenance
 
-- **Install / repair** is repeatable and reuses downloaded weights.
-- **Update** fast-forwards the Git checkout, then reinstalls pinned dependencies/model. It does not follow a floating model revision.
-- **Reset environment** removes only `app/env` and `app/.installed`; it retains weights and source. Stop the server first. Reinstall afterward.
-- Weights live in `app/models/lightonocr`. Environments, weights and runtime files are excluded from Git.
+- Install/repair reuses weights and installs pinned dependencies and local browser assets.
+- Update fast-forwards the checkout, then reruns installation.
+- Reset removes only `app/env` and `app/.installed`. It retains `app/models`, `app/out`, and source. Stop first, then reinstall.
 
-Limits: one OCR job at a time, 25 MB upload, at most 20 PDF pages, maximum 4096 generated tokens per page. A token-limit warning means output may be incomplete. AI OCR can make mistakes: check important text, figures, tables and numbers against the original.
+## Pinned source and licenses
 
-## Reproducibility and provenance
+- Original viewer/client: [lightonai/LightOnOCR](https://github.com/lightonai/LightOnOCR/tree/36755d461be079737860a5f03ae0c803501269e9), commit `36755d461be079737860a5f03ae0c803501269e9`, Apache-2.0. Vendored source and license are under `app/vendor`.
+- Model: [lightonai/LightOnOCR-3-1B](https://huggingface.co/lightonai/LightOnOCR-3-1B), revision `b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86`, Apache-2.0. Weights are not redistributed in Git.
+- PyTorch 2.10.0, torchvision 0.25.0, Transformers 5.16.1, OpenAI client 3.26.1; direct dependencies in `app/requirements.txt`. Transitive dependencies are not fully locked across platforms.
+- The pinned checkpoint needs explicit legacy weight-name mapping. Startup rejects any missing, unexpected or mismatched tensors.
+- Marked 14.1.3 and KaTeX 0.16.11 match upstream. DOMPurify 3.4.16 sanitizes model-generated HTML. SHA-512-verified npm archives are downloaded by `app/frontend_assets.py`; bundled licenses are preserved with the installed libraries.
+- Launcher/adapter code: Apache-2.0 (LICENSE). Dependencies retain their own licenses.
 
-- Model: [lightonai/LightOnOCR-3-1B](https://huggingface.co/lightonai/LightOnOCR-3-1B), revision `b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86`.
-- Official upstream client reference: [lightonai/LightOnOCR](https://github.com/lightonai/LightOnOCR/tree/36755d461be079737860a5f03ae0c803501269e9), commit `36755d461be079737860a5f03ae0c803501269e9`. This launcher does not install that vLLM-based client.
-- PyTorch `2.10.0`, torchvision `0.25.0`, Transformers `5.16.1`; direct app dependencies pinned in `app/requirements.txt`. Transitive dependencies are resolved by pip and are not fully locked across platforms.
-- The pinned legacy checkpoint uses an explicit Transformers weight-name conversion; startup refuses incomplete or mismatched weights.
-- Python 3.10–3.13. Pinokio's managed Python is used to create the app virtual environment.
-- PDF rendering uses pypdfium2, with longest edge 1540 pixels, preserving aspect ratio.
-
-## License
-
-Launcher/app code is Apache-2.0 (see LICENSE). LightOnOCR upstream code and the pinned model weights are Apache-2.0 per their respective upstream repository/model card. Downloaded dependencies retain their own licenses; PyTorch/torchvision are BSD-style, Transformers Apache-2.0, FastAPI MIT, Uvicorn BSD-3-Clause, Pillow HPND, and pypdfium2 Apache-2.0/BSD-3-Clause with PDFium's third-party notices. No model weights are redistributed in this repository.
+Narrow upstream frontend changes replace CDN URLs with local assets, sanitize rendered HTML and escape model-provided labels. Original viewer styling/features are retained. See `app/vendor/UPSTREAM.md`.
