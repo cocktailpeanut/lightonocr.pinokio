@@ -23,6 +23,8 @@ from urllib.request import ProxyHandler, build_opener
 from PIL import Image, UnidentifiedImageError
 
 from engine import Engine, MODEL_ID, normalize_image
+from model_catalog import MODELS, download_model, get_model
+from filelock import FileLock, Timeout
 from vendor.lightonocr.client import LightOnOCR
 from vendor.lightonocr.models import check_mode
 from vendor.lightonocr.server import Handler, ROUTES, STATIC, Server, safe_name, unique_name
@@ -32,7 +34,6 @@ APP_DIR = Path(__file__).resolve().parent
 OUT_DIR = APP_DIR / "out"
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_PAGES = 20
-LONGEST_EDGE = 1540
 Image.MAX_IMAGE_PIXELS = 40_000_000
 logger = logging.getLogger("lightonocr")
 
@@ -121,7 +122,7 @@ class LocalViewerServer(Server):
     def __init__(self, address: tuple[str, int], out: Path, ocr: LightOnOCR,
                  engine: Engine, adapter_url: str):
         out.mkdir(parents=True, exist_ok=True)
-        super().__init__(address, out.resolve(), ocr, longest_edge=LONGEST_EDGE,
+        super().__init__(address, out.resolve(), ocr, longest_edge=engine.longest_edge,
                          temperature=0.1, concurrency=1)
         self.RequestHandlerClass = LocalHandler
         self.engine = engine
@@ -142,7 +143,7 @@ class LocalViewerServer(Server):
                         if (image.mode in {"RGBA", "LA"} or "transparency" in image.info
                                 or image.getexif().get(274, 1) != 1):
                             prepared = src.parent / ".normalized-input.png"
-                            normalized = normalize_image(image)
+                            normalized = normalize_image(image, self.engine.longest_edge)
                             try:
                                 normalized.save(prepared, format="PNG")
                             finally:
@@ -261,15 +262,16 @@ class LocalHandler(Handler):
             return self.fail(HTTPStatus.BAD_REQUEST, "Body must be JSON with base_url and model.")
         if base_url and base_url != self.server.adapter_url:
             return self.fail(HTTPStatus.BAD_REQUEST, "This launcher uses its local Transformers backend. External or custom server URLs are disabled; keep the displayed local URL or leave it empty.")
-        if model and model != MODEL_ID:
-            return self.fail(HTTPStatus.BAD_REQUEST, f"This launcher has the pinned {MODEL_ID} model. Keep that model or leave it empty.")
-        write_settings(self.server.out, base_url=self.server.adapter_url, model=MODEL_ID)
+        active_model = self.server.engine.model_id
+        if model and model != active_model:
+            return self.fail(HTTPStatus.BAD_REQUEST, f"This launcher is running {active_model}. Stop it and choose Start 0.8B, Start 1B, or Start 4B to change models.")
+        write_settings(self.server.out, base_url=self.server.adapter_url, model=active_model)
         self.send_json(self.server.describe_endpoint())
 
     def create_run(self) -> None:
         mode = self.query.get("mode", "grounding")
         try:
-            check_mode(MODEL_ID, mode)
+            check_mode(self.server.engine.model_id, mode)
             pages = selected_pages(self.query.get("pages", ""))
         except ValueError as exc:
             return self.fail(HTTPStatus.BAD_REQUEST, str(exc))
@@ -313,12 +315,12 @@ class LocalHandler(Handler):
         super().delete_run(name)
 
 
-def make_client(adapter_url: str) -> LightOnOCR:
+def make_client(adapter_url: str, model_id: str = MODEL_ID) -> LightOnOCR:
     """Use the upstream client with HTTP proxy inheritance explicitly disabled."""
     import httpx
     from openai import OpenAI, Timeout
 
-    client = LightOnOCR(base_url=adapter_url, model=MODEL_ID, api_key="local-only")
+    client = LightOnOCR(base_url=adapter_url, model=model_id, api_key="local-only")
     client.client.close()
     client.client = OpenAI(base_url=adapter_url, api_key="local-only",
                            timeout=Timeout(3600.0, connect=10.0),
@@ -370,36 +372,46 @@ class LocalBackend:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Original LightOnOCR viewer with local Transformers inference")
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--model", choices=list(MODELS), required=True)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    check_viewer_assets()
-    engine = Engine()
-    backend = LocalBackend(engine)
-    viewer = None
-    ocr = None
+    runtime_lock = FileLock(str(APP_DIR / ".runtime.lock"), timeout=0)
     try:
-        backend.start()
-        adapter_url = backend.url + "/v1"
-        ocr = make_client(adapter_url)
-        status = ocr.check()
-        if not status["reachable"] or MODEL_ID not in status["models"]:
-            raise RuntimeError(f"The local model endpoint failed its readiness check: {status}")
-        viewer = LocalViewerServer(("127.0.0.1", args.port), OUT_DIR, ocr, engine, adapter_url)
-        # This marker is consumed by the launcher. Never print before all three
-        # readiness conditions: loaded weights, responsive adapter, bound viewer.
-        print(f"LIGHTONOCR_READY http://127.0.0.1:{viewer.server_port}", flush=True)
-        logger.info("Original LightOnOCR viewer; documents and results saved in %s", viewer.out)
-        viewer.serve_forever()
-    except KeyboardInterrupt:
-        pass
+        runtime_lock.acquire()
+    except Timeout:
+        raise SystemExit("LightOnOCR is already running or preparing a model. Stop it in Pinokio before selecting another model.")
+    try:
+        check_viewer_assets()
+        download_model(get_model(args.model))
+        engine = Engine(args.model)
+        backend = LocalBackend(engine)
+        viewer = None
+        ocr = None
+        try:
+            backend.start()
+            adapter_url = backend.url + "/v1"
+            ocr = make_client(adapter_url, engine.model_id)
+            status = ocr.check()
+            if not status["reachable"] or engine.model_id not in status["models"]:
+                raise RuntimeError(f"The local model endpoint failed its readiness check: {status}")
+            viewer = LocalViewerServer(("127.0.0.1", args.port), OUT_DIR, ocr, engine, adapter_url)
+            # This marker is consumed by the launcher. Never print before all three
+            # readiness conditions: loaded weights, responsive adapter, bound viewer.
+            print(f"LIGHTONOCR_READY http://127.0.0.1:{viewer.server_port}", flush=True)
+            logger.info("Original LightOnOCR viewer; documents and results saved in %s", viewer.out)
+            viewer.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if viewer is not None:
+                viewer.server_close()
+            if ocr is not None:
+                ocr.client.close()
+            backend.close()
     finally:
-        if viewer is not None:
-            viewer.server_close()
-        if ocr is not None:
-            ocr.client.close()
-        backend.close()
+        runtime_lock.release()
 
 
 if __name__ == "__main__":

@@ -64,11 +64,11 @@ def _number(value: Any, label: str, minimum: float, maximum: float,
     return float(value)
 
 
-def validate_payload(payload: Any) -> PageRequest:
+def validate_payload(payload: Any, model_id: str = MODEL_ID) -> PageRequest:
     payload = _keys(payload, {"model", "messages", "max_tokens", "temperature",
                               "top_p", "stream", "chat_template_kwargs"}, "request")
-    if payload.get("model") != MODEL_ID:
-        raise invalid(f"model must be {MODEL_ID}.")
+    if payload.get("model") != model_id:
+        raise invalid(f"model must be {model_id}. Stop the launcher before selecting another model.")
     if payload.get("stream", False) is not False:
         raise invalid("Only non-streaming responses are supported.")
     if "chat_template_kwargs" in payload:
@@ -116,7 +116,7 @@ def validate_payload(payload: Any) -> PageRequest:
     return PageRequest(image_url, mode, tokens, temperature, top_p)
 
 
-def _decode_image(data_url: str) -> Image.Image:
+def _decode_image(data_url: str, longest_edge: int = 1540) -> Image.Image:
     try:
         encoded = data_url.split(",", 1)[1]
         # Bound decoded memory before allocating it; padding can remove at most 2 bytes.
@@ -131,7 +131,7 @@ def _decode_image(data_url: str) -> Image.Image:
                 if original.format not in {"PNG", "JPEG", "WEBP"}:
                     raise invalid("Use a PNG, JPEG, or WEBP image.")
                 original.load()
-                return normalize_image(original)
+                return normalize_image(original, longest_edge)
     except (ValueError, binascii.Error, UnidentifiedImageError, OSError,
             Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise invalid("The image is invalid or its pixel dimensions are too large.") from exc
@@ -164,7 +164,7 @@ async def _read_json(request: Request) -> Any:
 def _completion(engine: Engine, lock: threading.Lock, page: PageRequest) -> dict[str, Any]:
     # Keep this lock in the worker: client cancellation cannot unlock an active model.
     with lock:
-        image = _decode_image(page.image_url)
+        image = _decode_image(page.image_url, engine.longest_edge)
         try:
             text, tokens, truncated = engine.transcribe(
                 image, page.mode, page.max_tokens,
@@ -175,7 +175,7 @@ def _completion(engine: Engine, lock: threading.Lock, page: PageRequest) -> dict
             image.close()
     return {
         "id": "chatcmpl-" + uuid.uuid4().hex,
-        "object": "chat.completion", "created": int(time.time()), "model": MODEL_ID,
+        "object": "chat.completion", "created": int(time.time()), "model": engine.model_id,
         "choices": [{"index": 0, "message": {"role": "assistant", "content": text},
                      "finish_reason": "length" if truncated else "stop"}],
         "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": tokens,
@@ -224,7 +224,7 @@ def create_app(engine: Engine) -> FastAPI:
 
     @app.get("/v1/models")
     async def models():
-        return {"object": "list", "data": [{"id": MODEL_ID, "object": "model",
+        return {"object": "list", "data": [{"id": engine.model_id, "object": "model",
                                             "created": 0, "owned_by": "lightonai"}]}
 
     @app.post("/v1/chat/completions")
@@ -234,7 +234,7 @@ def create_app(engine: Engine) -> FastAPI:
         app.state.pending += 1
         task = None
         try:
-            page = validate_payload(await _read_json(request))
+            page = validate_payload(await _read_json(request), engine.model_id)
             task = asyncio.create_task(run_in_threadpool(_completion, engine, lock, page))
             app.state.tasks.add(task)
 

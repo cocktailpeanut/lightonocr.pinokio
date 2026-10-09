@@ -1,6 +1,7 @@
 app/env/
 app/models/
 app/.installed
+app/.runtime.lock
 **/__pycache__/
 *.pyc
 logs/

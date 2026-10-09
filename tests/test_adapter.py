@@ -33,6 +33,8 @@ BASE = {'model': MODEL_ID, 'messages': [{'role': 'user', 'content': [{'type': 'i
 class Fake:
 
     def __init__(self):
+        self.model_id = MODEL_ID
+        self.longest_edge = 1540
         self.inference_lock = threading.Lock()
         self.last_prompt_tokens = 13
         self.calls = []
@@ -266,9 +268,9 @@ class EngineContract(unittest.TestCase):
         clean = {'missing_keys': set(), 'unexpected_keys': set(), 'mismatched_keys': [], 'error_msgs': []}
         with tempfile.TemporaryDirectory() as folder:
             Path(folder, 'config.json').write_text('{}')
-            with patch.dict(sys.modules, {'torch': torch, 'transformers': transformers}), patch.object(engine, 'MODEL_DIR', Path(folder)), patch.dict(os.environ, {'LIGHTONOCR_DEVICE': 'cpu', 'LIGHTONOCR_DTYPE': 'float32', 'LIGHTONOCR_CPU_THREADS': '1'}):
+            with patch.dict(sys.modules, {'torch': torch, 'transformers': transformers}), patch.object(engine, 'get_model', return_value=SimpleNamespace(model_id=MODEL_ID, revision='b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86', directory=Path(folder), longest_edge=1540, family='lighton_ocr', variant='1B')), patch.dict(os.environ, {'LIGHTONOCR_DEVICE': 'cpu', 'LIGHTONOCR_DTYPE': 'float32', 'LIGHTONOCR_CPU_THREADS': '1'}):
                 loader.from_pretrained.return_value = (model, clean)
-                e = Engine()
+                e = Engine("1B")
                 self.assertEqual(loader.from_pretrained.call_args.kwargs['key_mapping'], {'^language_model\\.model\\.': 'model.language_model.'})
                 self.assertTrue(loader.from_pretrained.call_args.kwargs['local_files_only'])
                 self.assertTrue(loader.from_pretrained.call_args.kwargs['output_loading_info'])
@@ -280,6 +282,6 @@ class EngineContract(unittest.TestCase):
                     with self.subTest(field=field):
                         loader.from_pretrained.return_value = (model, {**clean, field: ['bad key']})
                         with self.assertRaisesRegex(RuntimeError, 'Checkpoint weights did not load exactly'):
-                            Engine()
+                            Engine("1B")
 if __name__ == '__main__':
     unittest.main(verbosity=2)

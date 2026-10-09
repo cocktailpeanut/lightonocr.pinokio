@@ -1,4 +1,4 @@
-"""Local Transformers inference for the pinned LightOnOCR-3-1B checkpoint."""
+"""Local Transformers inference for an explicitly selected LightOnOCR-3 checkpoint."""
 from __future__ import annotations
 
 import logging
@@ -6,17 +6,14 @@ import os
 import sys
 import threading
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageOps
+from model_catalog import get_model
 
-MODEL_ID = "lightonai/LightOnOCR-3-1B"
-MODEL_REVISION = "b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86"
-APP_DIR = Path(__file__).resolve().parent
-MODEL_DIR = APP_DIR / "models" / "lightonocr"
+MODEL_ID = get_model("1B").model_id
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
-LONGEST_EDGE = 1540
+LONGEST_EDGE = get_model("1B").longest_edge
 Image.MAX_IMAGE_PIXELS = 40_000_000
 logger = logging.getLogger("lightonocr")
 
@@ -29,11 +26,14 @@ def package_version(name: str) -> str:
 
 
 class Engine:
-    def __init__(self) -> None:
+    def __init__(self, variant: str) -> None:
         import torch
         import transformers
-        from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor
 
+        self.spec = get_model(variant)
+        self.model_id = self.spec.model_id
+        self.revision = self.spec.revision
+        self.longest_edge = self.spec.longest_edge
         self.torch = torch
         self.inference_lock = threading.Lock()
         self.last_prompt_tokens = 0
@@ -70,17 +70,22 @@ class Engine:
         if not 1 <= threads <= 32:
             raise RuntimeError("LIGHTONOCR_CPU_THREADS must be an integer from 1 to 32.")
         torch.set_num_threads(min(threads, os.cpu_count() or 1))
-        if not (MODEL_DIR / "config.json").is_file():
-            raise RuntimeError("Model is not installed. Run the launcher Install action first.")
-        logger.info("Loading %s on %s (%s) from local files", MODEL_ID, self.device, dtype_name)
-        self.processor = LightOnOcrProcessor.from_pretrained(str(MODEL_DIR), local_files_only=True)
-        # This pinned checkpoint retains the legacy nested CausalLM key prefix.
-        # Transformers' native LightOnOcr class embeds the base language model.
-        self.model, loading = LightOnOcrForConditionalGeneration.from_pretrained(
-            str(MODEL_DIR), dtype=self.dtype, local_files_only=True,
-            key_mapping={r"^language_model\.model\.": "model.language_model."},
-            output_loading_info=True,
-        )
+        model_dir = self.spec.directory
+        if not (model_dir / "config.json").is_file():
+            raise RuntimeError("The selected model is not cached. Start it through Pinokio to download it.")
+        logger.info("Loading %s on %s (%s) from local files", self.model_id, self.device, dtype_name)
+        options = {"dtype": self.dtype, "local_files_only": True, "output_loading_info": True}
+        if self.spec.family == "lighton_ocr":
+            from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor
+            self.processor = LightOnOcrProcessor.from_pretrained(str(model_dir), local_files_only=True)
+            # Only the pinned 1B checkpoint has this legacy nested key prefix.
+            options["key_mapping"] = {r"^language_model\.model\.": "model.language_model."}
+            loader = LightOnOcrForConditionalGeneration
+        else:
+            from transformers import AutoProcessor, Qwen3_5ForConditionalGeneration
+            self.processor = AutoProcessor.from_pretrained(str(model_dir), local_files_only=True)
+            loader = Qwen3_5ForConditionalGeneration
+        self.model, loading = loader.from_pretrained(str(model_dir), **options)
         # Transformers may return sets; the original viewer uses stdlib json.dumps.
         self.loading_info = {
             key: list(values) if isinstance(values, (set, tuple)) else values
@@ -99,10 +104,11 @@ class Engine:
 
     def health(self) -> dict[str, Any]:
         return {"status": "ready", "backend": "transformers", "device": self.device,
-                "dtype": self.dtype_name, "model": MODEL_ID, "revision": MODEL_REVISION,
+                "dtype": self.dtype_name, "model": self.model_id, "revision": self.revision,
+                "variant": self.spec.variant, "architecture": self.spec.family,
                 "versions": self.versions, "busy": self.inference_lock.locked(),
                 "weight_loading": {"strict": True, **self.loading_info},
-                "limits": {"upload_mb": 25, "longest_edge": LONGEST_EDGE,
+                "limits": {"upload_mb": 25, "longest_edge": self.longest_edge,
                            "min_tokens": 128, "max_tokens": 4096}}
 
     def transcribe(self, image: Image.Image, mode: str, max_new_tokens: int,
@@ -135,7 +141,7 @@ class Engine:
         return text, token_count, token_count >= max_new_tokens and not ended
 
 
-def normalize_image(image: Image.Image) -> Image.Image:
+def normalize_image(image: Image.Image, longest_edge: int = LONGEST_EDGE) -> Image.Image:
     transposed = ImageOps.exif_transpose(image)
     try:
         if transposed.mode in {"RGBA", "LA"} or "transparency" in transposed.info:
@@ -150,5 +156,5 @@ def normalize_image(image: Image.Image) -> Image.Image:
             result = transposed.convert("RGB")
     finally:
         transposed.close()
-    result.thumbnail((LONGEST_EDGE, LONGEST_EDGE), Image.Resampling.LANCZOS)
+    result.thumbnail((longest_edge, longest_edge), Image.Resampling.LANCZOS)
     return result

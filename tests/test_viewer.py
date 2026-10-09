@@ -13,7 +13,7 @@ from PIL import Image
 import server
 
 class FakeEngine:
-    def __init__(self): self.calls=[]
+    def __init__(self): self.calls=[]; self.model_id=server.MODEL_ID; self.longest_edge=1540
     def health(self): return {'status':'ready', 'backend':'fake', 'model':server.MODEL_ID}
     def transcribe(self,image,mode,max_new_tokens,temperature=0.1,top_p=0.9):
         self.calls.append((image.size,mode,max_new_tokens,temperature,top_p))

@@ -1,4 +1,4 @@
-"""Install only this application's environment and pinned public model."""
+"""Install dependencies and viewer assets; download models only on explicit selection."""
 import argparse
 import json
 import os
@@ -8,9 +8,9 @@ import subprocess
 import sys
 import venv
 
+from model_catalog import MODELS, download_model, get_model
+
 ROOT = Path(__file__).resolve().parent
-MODEL_ID = 'lightonai/LightOnOCR-3-1B'
-MODEL_REVISION = 'b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86'
 TORCH_VERSION = '2.10.0'
 
 def run(args):
@@ -21,12 +21,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', choices=['cpu', 'cuda', 'mps'], default='cpu')
     parser.add_argument('--download-only', action='store_true')
+    parser.add_argument('--model', choices=list(MODELS))
     args = parser.parse_args()
     if args.download_only:
-        from huggingface_hub import snapshot_download
-        print(f'Downloading {MODEL_ID} at {MODEL_REVISION} (about 2 GB).', flush=True)
-        snapshot_download(MODEL_ID, revision=MODEL_REVISION, local_dir=str(ROOT / 'models' / 'lightonocr'),
-                          allow_patterns=['*.json', '*.safetensors', '*.jinja', 'README.md'], max_workers=2)
+        if not args.model:
+            parser.error('--download-only requires an explicitly selected --model.')
+        download_model(get_model(args.model))
         return
     if sys.version_info < (3, 10) or sys.version_info >= (3, 14):
         raise SystemExit('Python 3.10–3.13 is required. Update Pinokio and its managed Python.')
@@ -49,8 +49,7 @@ def main():
     run([python, '-m', 'pip', 'install', '-r', ROOT / 'requirements.txt', '--index-url', 'https://pypi.org/simple'])
     run([python, '-m', 'pip', 'check'])
     run([python, ROOT / 'frontend_assets.py'])
-    run([python, __file__, '--download-only'])
-    marker.write_text(json.dumps({'model': MODEL_ID, 'revision': MODEL_REVISION, 'device_wheels': args.device,
+    marker.write_text(json.dumps({'models': list(MODELS), 'device_wheels': args.device,
                                   'python': sys.version, 'torch': TORCH_VERSION}, indent=2), encoding='utf-8')
     print('LIGHTONOCR_INSTALL_COMPLETE', flush=True)
 
