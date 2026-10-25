@@ -18,9 +18,9 @@ class ModelSpec:
         return APP_DIR / "models" / self.cache_name
 
 MODELS = {
-    "0.8B": ModelSpec("0.8B", "lightonai/LightOnOCR-3-0.8B", "4a953edfc77f0e435532c503dd69dd74663d44c3", "lightonocr-0.8b", "qwen3_5", 2048),
-    "1B": ModelSpec("1B", "lightonai/LightOnOCR-3-1B", "b9a2b4c17f1eee9f29058d716b66b5f8e7d8db86", "lightonocr", "lighton_ocr", 1540),
-    "4B": ModelSpec("4B", "lightonai/LightOnOCR-3-4B", "a06e5c5459551c9d1696468aece70ffbcf01ae62", "lightonocr-4b", "qwen3_5", 2048),
+    "0.8B": ModelSpec("0.8B", "lightonai/LightOnOCR-3-0.8B", "36d8636925327c671bd8e479c517a004f7566bd9", "lightonocr-0.8b", "qwen3_5", 2048),
+    "1B": ModelSpec("1B", "lightonai/LightOnOCR-3-1B", "23d544085c886bbdace647bcfab91203299417e2", "lightonocr", "lighton_ocr", 1540),
+    "4B": ModelSpec("4B", "lightonai/LightOnOCR-3-4B", "b71010f095dc3735de7ee6b9969bff8f8f50b39a", "lightonocr-4b", "qwen3_5", 2048),
 }
 
 def get_model(variant: str) -> ModelSpec:
